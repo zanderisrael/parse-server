@@ -398,14 +398,18 @@ class DatabaseController {
   schemaPromise: ?Promise<SchemaController.SchemaController>;
   _transactionalSession: ?any;
 
-  constructor(adapter: StorageAdapter, schemaCache: any) {
+  constructor(adapter: StorageAdapter) {
     this.adapter = adapter;
-    this.schemaCache = schemaCache;
     // We don't want a mutable this.schema, because then you could have
     // one request that uses different schemas for different parts of
     // it. Instead, use loadSchema to get a schema.
     this.schemaPromise = null;
     this._transactionalSession = null;
+    // Used for Testing only
+    this.schemaCache = {
+      clear: () => SchemaController.clearSingleSchemaCache(),
+      get: () => SchemaController.getSingleSchemaCache(),
+    };
   }
 
   collectionExists(className: string): Promise<boolean> {
@@ -434,7 +438,7 @@ class DatabaseController {
     if (this.schemaPromise != null) {
       return this.schemaPromise;
     }
-    this.schemaPromise = SchemaController.load(this.adapter, this.schemaCache, options);
+    this.schemaPromise = SchemaController.load(this.adapter, options);
     this.schemaPromise.then(
       () => delete this.schemaPromise,
       () => delete this.schemaPromise
@@ -916,7 +920,8 @@ class DatabaseController {
    */
   deleteEverything(fast: boolean = false): Promise<any> {
     this.schemaPromise = null;
-    return Promise.all([this.adapter.deleteAllClasses(fast), this.schemaCache.clear()]);
+    this.schemaCache.clear();
+    return this.adapter.deleteAllClasses(fast);
   }
 
   // Returns a promise for a list of related ids given an owning id.
@@ -1325,8 +1330,12 @@ class DatabaseController {
   }
 
   deleteSchema(className: string): Promise<void> {
+    let schemaController;
     return this.loadSchema({ clearCache: true })
-      .then(schemaController => schemaController.getOneSchema(className, true))
+      .then(s => {
+        schemaController = s;
+        return schemaController.getOneSchema(className, true);
+      })
       .catch(error => {
         if (error === undefined) {
           return { fields: {} };
@@ -1356,13 +1365,93 @@ class DatabaseController {
                   this.adapter.deleteClass(joinTableName(className, name))
                 )
               ).then(() => {
-                return;
+                schemaController._cache.allClasses = (
+                  schemaController._cache.allClasses || []
+                ).filter(cached => cached.className !== className);
+                return schemaController.reloadData();
               });
             } else {
               return Promise.resolve();
             }
           });
       });
+  }
+
+  // This helps to create intermediate objects for simpler comparison of
+  // key value pairs used in query objects. Each key value pair will represented
+  // in a similar way to json
+  objectToEntriesStrings(query: any): Array<string> {
+    return Object.entries(query).map(a => a.map(s => JSON.stringify(s)).join(':'));
+  }
+
+  // Naive logic reducer for OR operations meant to be used only for pointer permissions.
+  reduceOrOperation(query: { $or: Array<any> }): any {
+    if (!query.$or) {
+      return query;
+    }
+    const queries = query.$or.map(q => this.objectToEntriesStrings(q));
+    let repeat = false;
+    do {
+      repeat = false;
+      for (let i = 0; i < queries.length - 1; i++) {
+        for (let j = i + 1; j < queries.length; j++) {
+          const [shorter, longer] = queries[i].length > queries[j].length ? [j, i] : [i, j];
+          const foundEntries = queries[shorter].reduce(
+            (acc, entry) => acc + (queries[longer].includes(entry) ? 1 : 0),
+            0
+          );
+          const shorterEntries = queries[shorter].length;
+          if (foundEntries === shorterEntries) {
+            // If the shorter query is completely contained in the longer one, we can strike
+            // out the longer query.
+            query.$or.splice(longer, 1);
+            queries.splice(longer, 1);
+            repeat = true;
+            break;
+          }
+        }
+      }
+    } while (repeat);
+    if (query.$or.length === 1) {
+      query = { ...query, ...query.$or[0] };
+      delete query.$or;
+    }
+    return query;
+  }
+
+  // Naive logic reducer for AND operations meant to be used only for pointer permissions.
+  reduceAndOperation(query: { $and: Array<any> }): any {
+    if (!query.$and) {
+      return query;
+    }
+    const queries = query.$and.map(q => this.objectToEntriesStrings(q));
+    let repeat = false;
+    do {
+      repeat = false;
+      for (let i = 0; i < queries.length - 1; i++) {
+        for (let j = i + 1; j < queries.length; j++) {
+          const [shorter, longer] = queries[i].length > queries[j].length ? [j, i] : [i, j];
+          const foundEntries = queries[shorter].reduce(
+            (acc, entry) => acc + (queries[longer].includes(entry) ? 1 : 0),
+            0
+          );
+          const shorterEntries = queries[shorter].length;
+          if (foundEntries === shorterEntries) {
+            // If the shorter query is completely contained in the longer one, we can strike
+            // out the shorter query.
+            query.$and.splice(shorter, 1);
+            queries.splice(shorter, 1);
+            repeat = true;
+            break;
+          }
+        }
+      }
+    } while (repeat);
+    if (query.$and.length === 1) {
+      query = { ...query, ...query.$and[0] };
+      delete query.$and;
+    }
+    return query;
   }
 
   // Constraints query using CLP's pointer permissions (PP) if any.
@@ -1448,13 +1537,13 @@ class DatabaseController {
         }
         // if we already have a constraint on the key, use the $and
         if (Object.prototype.hasOwnProperty.call(query, key)) {
-          return { $and: [queryClause, query] };
+          return this.reduceAndOperation({ $and: [queryClause, query] });
         }
         // otherwise just add the constaint
         return Object.assign({}, query, queryClause);
       });
 
-      return queries.length === 1 ? queries[0] : { $or: queries };
+      return queries.length === 1 ? queries[0] : this.reduceOrOperation({ $or: queries });
     } else {
       return query;
     }

@@ -308,18 +308,18 @@ describe_only_db('mongo')('MongoStorageAdapter', () => {
   });
 
   it('should use index for caseInsensitive query', async () => {
+    const database = Config.get(Parse.applicationId).database;
+
     const user = new Parse.User();
     user.set('username', 'Bugs');
     user.set('password', 'Bunny');
     await user.signUp();
 
-    const database = Config.get(Parse.applicationId).database;
     const preIndexPlan = await database.find(
       '_User',
       { username: 'bugs' },
       { caseInsensitive: true, explain: true }
     );
-
     const schema = await new Parse.Schema('_User').get();
 
     await database.adapter.ensureIndex(
@@ -335,7 +335,7 @@ describe_only_db('mongo')('MongoStorageAdapter', () => {
       { username: 'bugs' },
       { caseInsensitive: true, explain: true }
     );
-    expect(preIndexPlan.executionStats.executionStages.stage).toBe('COLLSCAN');
+    expect(preIndexPlan.executionStats.executionStages.stage).toBe('FETCH');
     expect(postIndexPlan.executionStats.executionStages.stage).toBe('FETCH');
   });
 
@@ -547,6 +547,33 @@ describe_only_db('mongo')('MongoStorageAdapter', () => {
         calls.forEach(call => {
           expect(call.args[2].session.transaction.state).toBe('NO_TRANSACTION');
         });
+      });
+    });
+
+    describe('watch _SCHEMA', () => {
+      it('should change', async done => {
+        const adapter = new MongoStorageAdapter({ uri: databaseURI });
+        await reconfigureServer({
+          replicaSet: true,
+          databaseAdapter: adapter,
+        });
+        expect(adapter.replicaSet).toBe(true);
+        spyOn(adapter, '_onchange');
+        const schema = {
+          fields: {
+            array: { type: 'Array' },
+            object: { type: 'Object' },
+            date: { type: 'Date' },
+          },
+        };
+
+        await adapter.createClass('Stuff', schema);
+        const myClassSchema = await adapter.getClass('Stuff');
+        expect(myClassSchema).toBeDefined();
+        setTimeout(() => {
+          expect(adapter._onchange).toHaveBeenCalledTimes(1);
+          done();
+        }, 5000);
       });
     });
   }

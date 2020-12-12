@@ -3,10 +3,12 @@
 // mount is the URL for the root of the API; includes http, domain, etc.
 
 import AppCache from './cache';
-import SchemaCache from './Controllers/SchemaCache';
 import DatabaseController from './Controllers/DatabaseController';
 import net from 'net';
-import { IdempotencyOptions } from './Options/Definitions';
+import {
+  IdempotencyOptions,
+  FileUploadOptions,
+} from './Options/Definitions';
 
 function removeTrailingSlash(str) {
   if (!str) {
@@ -28,12 +30,7 @@ export class Config {
     config.applicationId = applicationId;
     Object.keys(cacheInfo).forEach(key => {
       if (key == 'databaseController') {
-        const schemaCache = new SchemaCache(
-          cacheInfo.cacheController,
-          cacheInfo.schemaCacheTTL,
-          cacheInfo.enableSingleSchemaCache
-        );
-        config.database = new DatabaseController(cacheInfo.databaseController.adapter, schemaCache);
+        config.database = new DatabaseController(cacheInfo.databaseController.adapter);
       } else {
         config[key] = cacheInfo[key];
       }
@@ -71,6 +68,7 @@ export class Config {
     allowHeaders,
     idempotencyOptions,
     emailVerifyTokenReuseIfValid,
+    fileUpload,
   }) {
     if (masterKey === readOnlyMasterKey) {
       throw new Error('masterKey and readOnlyMasterKey should be different');
@@ -88,8 +86,8 @@ export class Config {
     }
 
     this.validateAccountLockoutPolicy(accountLockout);
-
     this.validatePasswordPolicy(passwordPolicy);
+    this.validateFileUploadOptions(fileUpload);
 
     if (typeof revokeSessionOnPasswordReset !== 'boolean') {
       throw 'revokeSessionOnPasswordReset must be a boolean value';
@@ -242,6 +240,30 @@ export class Config {
     }
     if (emailVerifyTokenReuseIfValid && !emailVerifyTokenValidityDuration) {
       throw 'You cannot use emailVerifyTokenReuseIfValid without emailVerifyTokenValidityDuration';
+    }
+  }
+
+  static validateFileUploadOptions(fileUpload) {
+    if (!fileUpload) {
+      fileUpload = {};
+    }
+    if (typeof fileUpload !== 'object' || fileUpload instanceof Array) {
+      throw 'fileUpload must be an object value.';
+    }
+    if (fileUpload.enableForAnonymousUser === undefined) {
+      fileUpload.enableForAnonymousUser = FileUploadOptions.enableForAnonymousUser.default;
+    } else if (typeof fileUpload.enableForAnonymousUser !== 'boolean') {
+      throw 'fileUpload.enableForAnonymousUser must be a boolean value.';
+    }
+    if (fileUpload.enableForPublic === undefined) {
+      fileUpload.enableForPublic = FileUploadOptions.enableForPublic.default;
+    } else if (typeof fileUpload.enableForPublic !== 'boolean') {
+      throw 'fileUpload.enableForPublic must be a boolean value.';
+    }
+    if (fileUpload.enableForAuthenticatedUser === undefined) {
+      fileUpload.enableForAuthenticatedUser = FileUploadOptions.enableForAuthenticatedUser.default;
+    } else if (typeof fileUpload.enableForAuthenticatedUser !== 'boolean') {
+      throw 'fileUpload.enableForAuthenticatedUser must be a boolean value.';
     }
   }
 

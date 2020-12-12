@@ -88,6 +88,12 @@ const defaultConfiguration = {
   fileKey: 'test',
   silent,
   logLevel,
+  replicaSet: false,
+  fileUpload: {
+    enableForPublic: true,
+    enableForAnonymousUser: true,
+    enableForAuthenticatedUser: true,
+  },
   push: {
     android: {
       senderId: 'yolo',
