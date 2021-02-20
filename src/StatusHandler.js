@@ -295,8 +295,6 @@ export function pushStatusHandler(config, existingObjectId) {
         }
       );
     }
-
-    // indicate this batch is complete
     incrementOp(update, 'count', -1);
     update.status = 'running';
 
