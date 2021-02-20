@@ -4493,7 +4493,6 @@ describe('ParseGraphQLServer', () => {
 
               const databaseAdapter = parseServer.config.databaseController.adapter;
               spyOn(databaseAdapter.database.serverConfig, 'cursor').and.callThrough();
-              await new Promise(resolve => setTimeout(resolve, 300));
 
               await apolloClient.query({
                 query: gql`
@@ -4538,7 +4537,6 @@ describe('ParseGraphQLServer', () => {
 
               const databaseAdapter = parseServer.config.databaseController.adapter;
               spyOn(databaseAdapter.database.serverConfig, 'cursor').and.callThrough();
-              await new Promise(resolve => setTimeout(resolve, 300));
 
               await apolloClient.query({
                 query: gql`
@@ -5476,7 +5474,6 @@ describe('ParseGraphQLServer', () => {
 
               const databaseAdapter = parseServer.config.databaseController.adapter;
               spyOn(databaseAdapter.database.serverConfig, 'cursor').and.callThrough();
-              await new Promise(resolve => setTimeout(resolve, 300));
 
               await apolloClient.query({
                 query: gql`
@@ -5522,7 +5519,6 @@ describe('ParseGraphQLServer', () => {
 
               const databaseAdapter = parseServer.config.databaseController.adapter;
               spyOn(databaseAdapter.database.serverConfig, 'cursor').and.callThrough();
-              await new Promise(resolve => setTimeout(resolve, 300));
 
               await apolloClient.query({
                 query: gql`
@@ -9040,7 +9036,7 @@ describe('ParseGraphQLServer', () => {
 
         it('should support object values', async () => {
           try {
-            const someObjectFieldValue = {
+            const someFieldValue = {
               foo: { bar: 'baz' },
               number: 10,
             };
@@ -9055,7 +9051,7 @@ describe('ParseGraphQLServer', () => {
               `,
               variables: {
                 schemaFields: {
-                  addObjects: [{ name: 'someObjectField' }],
+                  addObjects: [{ name: 'someField' }],
                 },
               },
               context: {
@@ -9064,10 +9060,11 @@ describe('ParseGraphQLServer', () => {
                 },
               },
             });
+
             await parseGraphQLServer.parseGraphQLSchema.databaseController.schemaCache.clear();
 
             const schema = await new Parse.Schema('SomeClass').get();
-            expect(schema.fields.someObjectField.type).toEqual('Object');
+            expect(schema.fields.someField.type).toEqual('Object');
 
             const createResult = await apolloClient.mutate({
               mutation: gql`
@@ -9081,13 +9078,13 @@ describe('ParseGraphQLServer', () => {
               `,
               variables: {
                 fields: {
-                  someObjectField: someObjectFieldValue,
+                  someField: someFieldValue,
                 },
               },
             });
 
             const where = {
-              someObjectField: {
+              someField: {
                 equalTo: { key: 'foo.bar', value: 'baz' },
                 notEqualTo: { key: 'foo.bar', value: 'bat' },
                 greaterThan: { key: 'number', value: 9 },
@@ -9099,13 +9096,13 @@ describe('ParseGraphQLServer', () => {
                 query GetSomeObject($id: ID!, $where: SomeClassWhereInput) {
                   someClass(id: $id) {
                     id
-                    someObjectField
+                    someField
                   }
                   someClasses(where: $where) {
                     edges {
                       node {
                         id
-                        someObjectField
+                        someField
                       }
                     }
                   }
@@ -9119,13 +9116,13 @@ describe('ParseGraphQLServer', () => {
 
             const { someClass: getResult, someClasses } = queryResult.data;
 
-            const { someObjectField } = getResult;
-            expect(typeof someObjectField).toEqual('object');
-            expect(someObjectField).toEqual(someObjectFieldValue);
+            const { someField } = getResult;
+            expect(typeof someField).toEqual('object');
+            expect(someField).toEqual(someFieldValue);
 
             // Checks class query results
             expect(someClasses.edges.length).toEqual(1);
-            expect(someClasses.edges[0].node.someObjectField).toEqual(someObjectFieldValue);
+            expect(someClasses.edges[0].node.someField).toEqual(someFieldValue);
           } catch (e) {
             handleError(e);
           }
@@ -9133,11 +9130,11 @@ describe('ParseGraphQLServer', () => {
 
         it('should support object composed queries', async () => {
           try {
-            const someObjectFieldValue1 = {
+            const someFieldValue = {
               lorem: 'ipsum',
               number: 10,
             };
-            const someObjectFieldValue2 = {
+            const someFieldValue2 = {
               foo: {
                 test: 'bar',
               },
@@ -9150,7 +9147,7 @@ describe('ParseGraphQLServer', () => {
                   createClass(
                     input: {
                       name: "SomeClass"
-                      schemaFields: { addObjects: [{ name: "someObjectField" }] }
+                      schemaFields: { addObjects: [{ name: "someField" }] }
                     }
                   ) {
                     clientMutationId
@@ -9186,10 +9183,10 @@ describe('ParseGraphQLServer', () => {
               `,
               variables: {
                 fields1: {
-                  someObjectField: someObjectFieldValue1,
+                  someField: someFieldValue,
                 },
                 fields2: {
-                  someObjectField: someObjectFieldValue2,
+                  someField: someFieldValue2,
                 },
               },
             });
@@ -9197,24 +9194,24 @@ describe('ParseGraphQLServer', () => {
             const where = {
               AND: [
                 {
-                  someObjectField: {
+                  someField: {
                     greaterThan: { key: 'number', value: 9 },
                   },
                 },
                 {
-                  someObjectField: {
+                  someField: {
                     lessThan: { key: 'number', value: 11 },
                   },
                 },
                 {
                   OR: [
                     {
-                      someObjectField: {
+                      someField: {
                         equalTo: { key: 'lorem', value: 'ipsum' },
                       },
                     },
                     {
-                      someObjectField: {
+                      someField: {
                         equalTo: { key: 'foo.test', value: 'bar' },
                       },
                     },
@@ -9229,7 +9226,7 @@ describe('ParseGraphQLServer', () => {
                     edges {
                       node {
                         id
-                        someObjectField
+                        someField
                       }
                     }
                   }
@@ -9247,11 +9244,11 @@ describe('ParseGraphQLServer', () => {
             const { edges } = someClasses;
             expect(edges.length).toEqual(2);
             expect(
-              edges.find(result => result.node.id === create1.someClass.id).node.someObjectField
-            ).toEqual(someObjectFieldValue1);
+              edges.find(result => result.node.id === create1.someClass.id).node.someField
+            ).toEqual(someFieldValue);
             expect(
-              edges.find(result => result.node.id === create2.someClass.id).node.someObjectField
-            ).toEqual(someObjectFieldValue2);
+              edges.find(result => result.node.id === create2.someClass.id).node.someField
+            ).toEqual(someFieldValue2);
           } catch (e) {
             handleError(e);
           }
@@ -9259,7 +9256,7 @@ describe('ParseGraphQLServer', () => {
 
         it('should support array values', async () => {
           try {
-            const someArrayFieldValue = [1, 'foo', ['bar'], { lorem: 'ipsum' }, true];
+            const someFieldValue = [1, 'foo', ['bar'], { lorem: 'ipsum' }, true];
 
             await apolloClient.mutate({
               mutation: gql`
@@ -9271,7 +9268,7 @@ describe('ParseGraphQLServer', () => {
               `,
               variables: {
                 schemaFields: {
-                  addArrays: [{ name: 'someArrayField' }],
+                  addArrays: [{ name: 'someField' }],
                 },
               },
               context: {
@@ -9284,7 +9281,7 @@ describe('ParseGraphQLServer', () => {
             await parseGraphQLServer.parseGraphQLSchema.databaseController.schemaCache.clear();
 
             const schema = await new Parse.Schema('SomeClass').get();
-            expect(schema.fields.someArrayField.type).toEqual('Array');
+            expect(schema.fields.someField.type).toEqual('Array');
 
             const createResult = await apolloClient.mutate({
               mutation: gql`
@@ -9298,7 +9295,7 @@ describe('ParseGraphQLServer', () => {
               `,
               variables: {
                 fields: {
-                  someArrayField: someArrayFieldValue,
+                  someField: someFieldValue,
                 },
               },
             });
@@ -9307,17 +9304,17 @@ describe('ParseGraphQLServer', () => {
               query: gql`
                 query GetSomeObject($id: ID!) {
                   someClass(id: $id) {
-                    someArrayField {
+                    someField {
                       ... on Element {
                         value
                       }
                     }
                   }
-                  someClasses(where: { someArrayField: { exists: true } }) {
+                  someClasses(where: { someField: { exists: true } }) {
                     edges {
                       node {
                         id
-                        someArrayField {
+                        someField {
                           ... on Element {
                             value
                           }
@@ -9332,9 +9329,9 @@ describe('ParseGraphQLServer', () => {
               },
             });
 
-            const { someArrayField } = getResult.data.someClass;
-            expect(Array.isArray(someArrayField)).toBeTruthy();
-            expect(someArrayField.map(element => element.value)).toEqual(someArrayFieldValue);
+            const { someField } = getResult.data.someClass;
+            expect(Array.isArray(someField)).toBeTruthy();
+            expect(someField.map(element => element.value)).toEqual(someFieldValue);
             expect(getResult.data.someClasses.edges.length).toEqual(1);
           } catch (e) {
             handleError(e);

@@ -308,18 +308,18 @@ describe_only_db('mongo')('MongoStorageAdapter', () => {
   });
 
   it('should use index for caseInsensitive query', async () => {
-    const database = Config.get(Parse.applicationId).database;
-
     const user = new Parse.User();
     user.set('username', 'Bugs');
     user.set('password', 'Bunny');
     await user.signUp();
 
+    const database = Config.get(Parse.applicationId).database;
     const preIndexPlan = await database.find(
       '_User',
       { username: 'bugs' },
       { caseInsensitive: true, explain: true }
     );
+
     const schema = await new Parse.Schema('_User').get();
 
     await database.adapter.ensureIndex(
@@ -335,7 +335,7 @@ describe_only_db('mongo')('MongoStorageAdapter', () => {
       { username: 'bugs' },
       { caseInsensitive: true, explain: true }
     );
-    expect(preIndexPlan.executionStats.executionStages.stage).toBe('FETCH');
+    expect(preIndexPlan.executionStats.executionStages.stage).toBe('COLLSCAN');
     expect(postIndexPlan.executionStats.executionStages.stage).toBe('FETCH');
   });
 
