@@ -3226,6 +3226,25 @@ describe('Parse.Query testing', () => {
     expect(response.data.results[0].hello).toBe('world');
   });
 
+  fit('include keys', async () => {
+    const comment = new Parse.Object('Comment');
+    const post = new Parse.Object('Post');
+    post.set('foo', 'bar');
+    comment.set('post', post);
+    await Parse.Object.saveAll([comment, post]);
+
+    const response = await request({
+      url: Parse.serverURL + '/classes/Comment',
+      qs: {
+        include: 'post',
+        order: '-createdAt',
+        limit: 10,
+      },
+      headers: masterKeyHeaders,
+    });
+    expect(response.data.results[0].post.foo).toBe('bar');
+  });
+
   it('exclude keys with select same key', async () => {
     const obj = new TestObject({ foo: 'baz', hello: 'world' });
     await obj.save();
